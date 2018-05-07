@@ -69,7 +69,7 @@ data[, c("End.date.day", "End.date.time")] <- t(data.frame(strsplit(as.character
 data$Start.date.day <- as.Date(data$Start.date.day)
 data$End.date.day <- as.Date(data$End.date.day)
 
-sept <- data[as.Date("2010-9-01","%Y-%m-%d") <= data$Start.date.day & as.Date("2010-9-31","%Y-%m-%d") >= data$Start.date.day,]
-oct <- data[as.Date("2010-10-01","%Y-%m-%d") <= data$Start.date.day & as.Date("2010-10-31","%Y-%m-%d") >= data$Start.date.day,]
-nov <- data[as.Date("2010-11-01","%Y-%m-%d") <= data$Start.date.day & as.Date("2010-11-31","%Y-%m-%d") >= data$Start.date.day,]
-dec <- data[as.Date("2010-12-01","%Y-%m-%d") <= data$Start.date.day & as.Date("2010-12-31","%Y-%m-%d") >= data$Start.date.day,]
+sept <- data[as.Date("2010-9-01","%Y-%m-%d") <= data$Start.date.day,][ as.Date("2010-9-31","%Y-%m-%d") >= data$Start.date.day,]
+oct <- data[as.Date("2010-10-01","%Y-%m-%d") <= data$Start.date.day,][ as.Date("2010-10-31","%Y-%m-%d") >= data$Start.date.day,]
+nov <- data[as.Date("2010-11-01","%Y-%m-%d") <= data$Start.date.day,][ as.Date("2010-11-31","%Y-%m-%d") >= data$Start.date.day,]
+dec <- data[as.Date("2010-12-01","%Y-%m-%d") <= data$Start.date.day,][ as.Date("2010-12-31","%Y-%m-%d") >= data$Start.date.day,]
