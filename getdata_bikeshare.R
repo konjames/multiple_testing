@@ -30,6 +30,27 @@ for(i in unique(c(station_start,station_end))){
 }
 # note that stations get added to the program over time
 
+Capital_Bike_Share_Locations <- read_csv("~/Downloads/Capital_Bike_Share_Locations.csv")
 
+data$Start_latitude = 0
+data$Start_longitude = 0
 
+data$end_latitude = 0 
+data$end_longitude = 0
+
+# METHOD 1
+for (i in 1:dim(data)[1]) {
+  data[i, "Start_latitude"] <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == data[i, "Start.station.number"],]$LATITUDE
+  data[i, "Start_longitude"] <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == data[i, "Start.station.number"],]$LONGITUDE
+  data[i, "end_latitude"] <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == data[i, "End.station.number"],]$LATITUDE
+  data[i, "end_longitude"] <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == data[i, "End.station.number"],]$LONGITUDE
+}
+
+# METHOD 2
+for (station in Capital_Bike_Share_Locations$TERMINAL_NUMBER) {
+  data[data$Start.station.number == station,]$LATITUDE <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == station,]$LATITUDE
+  data[data$Start.station.number == station,]$LONGITUDE <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == station,]$LONGITUDE
+  data[data$End.station.number == station,]$LATITUDE <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == station,]$LATITUDE
+  data[data$End.station.number == station,]$LONGITUDE <- Capital_Bike_Share_Locations[Capital_Bike_Share_Locations$TERMINAL_NUMBER == station,]$LONGITUDE
+}
 
