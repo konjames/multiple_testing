@@ -96,7 +96,7 @@ for (i in 1:(length(dates) - 1)) {
 
 weather$DATE = round_date(as.POSIXct(weather$DATE, tz = "UTC"), "hour")
 write.csv(weather, file = "weather_cleaned.csv")
-
+weather <- weather[weather$DATE < as.POSIXct("2012-01-01", tz = "UTC"),]
 
 start_date = round_date(as.POSIXct(data[1, "Start.date"], tz = "UTC"), "hour")
 end_date = round_date(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"), "hour")
@@ -131,6 +131,8 @@ Lasso_data[, "Day"] <- wday(Lasso_data[, "Date"], label = TRUE)
 Lasso_data$Weekend <- 0 
 Lasso_data[Lasso_data$Day == "Sat", "Weekend"] <- 1
 Lasso_data[Lasso_data$Day == "Sun", "Weekend"] <- 1
+
+Lasso_data[, c("WND", "DEW", "VIS", "TMP")] = weather[, c("WND", "DEW", "VIS", "TMP")] 
 
 write.csv(Lasso_data, file = "Lasso_data.csv")
 
