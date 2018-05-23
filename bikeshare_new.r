@@ -3,10 +3,6 @@ library("lubridate")
 library("readr")
 library("forecast")
 
-
-data <- read_csv("Multiple_testing_proj/2011-capitalbikeshare-tripdata.csv")
-Capital_Bike_Share_Locations <- read_csv("Multiple_testing_proj/Capital_Bike_Share_Locations.csv")
-
 data = NULL
 
 for(i in 2011:2011) {
@@ -73,7 +69,7 @@ Holiday_check = function(date) {
 
 
 ## Download weather data of Washing Reagan Airport 2017 (WRONG YEAR BUT WILL CHANGE TOMORROW)
-weather <- read_csv("Desktop/reaganairport.csv")
+weather <- read_csv("reaganairport.csv")
 
 ## CLEAN THE Weather data
 weather <- data.frame(weather)
@@ -99,15 +95,16 @@ for (i in 1:(length(dates) - 1)) {
 }
 
 weather$DATE = round_date(as.POSIXct(weather$DATE, tz = "UTC"), "hour")
+write.csv(weather, file = "weather_cleaned.csv")
 
 
 start_date = round_date(as.POSIXct(data[1, "Start.date"], tz = "UTC"), "hour")
-end_date = round_date(as.POSIXct(data[dim(data)[1], "End.date"], tz = "UTC"), "hour")
+end_date = round_date(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"), "hour")
 
 dates_lasso = seq(start_date, end_date, by="hour")
 dates_lasso = as.POSIXct(dates)
-Lasso_data = data.frame(matrix(ncol = 6, nrow = length(dates)))
-colnames(Lasso_data) <- c("Date", "Rides", "WND", "DEW", "VIS", "TMP")
+Lasso_data = data.frame(matrix(ncol = 7, nrow = length(dates)))
+colnames(Lasso_data) <- c("Date", "Rides", "WND", "DEW", "VIS", "TMP", "Members")
 Lasso_data[, 1] = dates_lasso
 
 data$Start.date <- as.POSIXct(data$Start.date, tz = "UTC")
@@ -115,9 +112,11 @@ for(i in 1:(length(dates_lasso) -1)) {
   date1 <- as.POSIXct(dates_lasso[i])
   date2 <- as.POSIXct(dates_lasso[i+1])
   int <- interval(date1, date2)
-  Lasso_data[Lasso_data$Date == date1, "Rides"] = dim(data[data$Start.date %within% int,])[1]
+  #Lasso_data[Lasso_data$Date == date1, "Rides"] = dim(data[data$Start.date %within% int,])[1]
+  #Lasso_data[Lasso_data$Date == date1, "Members"] = dim(data[data$Start.date %within% int & data$Member.type == "Member",])[1]
+  Lasso_data[Lasso_data$Date == date1, "Members"] = sum(data$Start.date %within% int & data$Member.type == "Member")
+  Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(data$Start.date %within% int)
 }
-Lasso_data[1:(length(dates_lasso) -1), c("WND", "DEW", "VIS", "TMP")] = weather[1:(length(dates_lasso) -1), c("WND", "DEW", "VIS", "TMP")]
 
 #FOR HOLIDAY INDICATOR
 Lasso_data[,"Holiday"] <- 0 
@@ -126,44 +125,50 @@ for (i in 1:(length(dates_lasso) -1)) {
 }
 
 ## FOR DAY INDICATOR
-Lasso_data[,"Day"] <- 0 
-for (i in 1:(length(dates_lasso) -1)) {
-  day <- as.POSIXct(Lasso_data[i,Date])
-  Lasso_data[i,"Day"] <- wday(Lasso_data[1:(length(dates_lasso) -1), "Date"], label = TRUE)
-}
+Lasso_data$Day <- 0 
+Lasso_data[, "Day"] <- wday(Lasso_data[, "Date"], label = TRUE)
 
-temp<- wday(ymd_hms(Lasso_data[1:(length(dates_lasso) -1), "Date"]), label = TRUE)
-Lasso_data[1:(length(dates_lasso) -1), "Day"] <- wday(temp, label = TRUE)
+Lasso_data$Weekend <- 0 
+Lasso_data[Lasso_data$Day == "Sat", "Weekend"] <- 1
+Lasso_data[Lasso_data$Day == "Sun", "Weekend"] <- 1
 
-## FOR DAY INDICATOR
-temp <- wday(Lasso_data[, "Date"], label = TRUE)
-Lasso_data[, "Day"] <- temp
+write.csv(Lasso_data, file = "Lasso_data.csv")
 
 
+## QUESTION: IS THERE A CHANGE IN THE DEMAND FOR A STATION BETWEEN SEASONS
+## TEST: USING DIFFERENT OF MEANS NORMAL DISTRIBUTION: USE PERMUTATION TEST 
+data$Season <- "Fall"
+data$Start.date <- as.POSIXct(data$Start.date)
+winter <- interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")) # Winter dates
+data[data$Start.date %within% winter, "Season"] <- "Winter"
+
+winter <- interval(as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")) # Winter dates
+data[data$Start.date %within% winter, "Season"] <- "Winter"
+
+spring <- interval(as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")) # Spring dates
+data[data$Start.date %within% spring, "Season"] <- "Spring"
+
+summer <- interval(as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")) # Fall dates
+data[data$Start.date %within% summer, "Season"] <- "Summer"
 
 
 
-## Selective Inference for ranking
-stations <- levels(as.factor(data2$`Start station number`))
-popular_stations <- data.frame(matrix(nrow = length(stations), ncol = 2))
-colnames(popular_stations) <- c("Station", "End.Station")
+stations <- levels(as.factor(data$Start.station.number))
+popular_stations <- data.frame(matrix(nrow = length(stations), ncol = 6))
+colnames(popular_stations) <- c("Station", "Fall", "Winter", "Spring", "Summer", "Total")
 popular_stations$Station <- stations
 
-for(station in stations) {
-  temp_data <- data2[data2$`Start station number` == station,]
-  end_dests <- stations[stations != station]
-  
-  route_counter <- data.frame(matrix(nrow = length(end_dests), ncol = 2))
-  colnames(route_counter) <- c("End.Station", "Count")
-  route_counter$End.Station <- end_dests
-  for(end_dest in end_dests) {
-    route_counter[route_counter$End.Station == end_dest, "Count"] <- dim(temp_data[temp_data$`End station number` == end_dest,])[1]
-  }
-  winner <- route_counter[route_counter$Count == max(route_counter$Count), "End.Station"]
-  second_place <- sort(route_counter$Count, decreasing = TRUE)[2]
-  total <- sum(route_counter$Count)
-  subset_total <- total - sum(sort(route_counter$Count, decreasing = TRUE)[c(-1,-2)])
-  
-  
+modified_data <- data
+for (station in stations) {
+  popular_stations[popular_stations$Station == station,"Fall"] = 
+    sum(data$Start.station.number == station & data$Season == "Fall")
+  popular_stations[popular_stations$Station == station,"Winter"] = 
+    sum(data$Start.station.number == station & data$Season == "Winter")
+  popular_stations[popular_stations$Station == station,"Spring"] = 
+    sum(data$Start.station.number == station & data$Season == "Spring")
+  popular_stations[popular_stations$Station == station,"Summer"] = 
+    sum(data$Start.station.number == station & data$Season == "Summer")
 }
+popular_stations$Total <- popular_stations$Fall + popular_stations$Winter + popular_stations$Spring + popular_stations$Summer
+
 
