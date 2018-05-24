@@ -43,3 +43,34 @@ for (station in stations) {
     sum(data$Start.station.number == station & data$Season == "Summer")
 }
 popular_stations$Total <- popular_stations$Fall + popular_stations$Winter + popular_stations$Spring + popular_stations$Summer
+
+
+
+## Download weather data of Washing Reagan Airport 2011
+## OLD VERSION FROM NCDC CDO 
+weather <- read_csv("reaganairport.csv")
+
+## CLEAN THE Weather data
+weather <- data.frame(weather)
+weather$Day <- as.Date(weather$DATE)
+
+drops <- c("STATION","CALLSIGN", "SOURCE", "REPORT_TYPE", "QUALITY_CONTROL", 
+           "QUALITY_CONTROL_1", "REPORT_TYPE_1", "SOURCE_1")
+
+weather <- weather[ , !(names(weather) %in% drops)]
+
+dates = seq(as.POSIXct("2011-01-01 00:00:00", tz = "UTC"), as.POSIXct("2012-01-01 22:00:00", tz = "UTC"), by="hour")
+
+for (i in 1:(length(dates) - 1)) {
+  date1 <- dates[i]
+  date2 <- dates[i+1]
+  int <- interval(date1, date2)
+  a = weather[weather$DATE %within% int, "DATE"]
+  minimum = c(a)[1]
+  if(!is.infinite(minimum)) {
+    weather <- weather[ !((weather$DATE %within% int) & 
+                            weather$DATE != minimum),] 
+  }
+}
+
+weather$DATE = round_date(as.POSIXct(weather$DATE, tz = "UTC"), "hour")
