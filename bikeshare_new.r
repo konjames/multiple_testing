@@ -160,17 +160,54 @@ popular_stations <- data.frame(matrix(nrow = length(stations), ncol = 6))
 colnames(popular_stations) <- c("Station", "Fall", "Winter", "Spring", "Summer", "Total")
 popular_stations$Station <- stations
 
-modified_data <- data
-for (station in stations) {
-  popular_stations[popular_stations$Station == station,"Fall"] = 
-    sum(data$Start.station.number == station & data$Season == "Fall")
-  popular_stations[popular_stations$Station == station,"Winter"] = 
-    sum(data$Start.station.number == station & data$Season == "Winter")
-  popular_stations[popular_stations$Station == station,"Spring"] = 
-    sum(data$Start.station.number == station & data$Season == "Spring")
-  popular_stations[popular_stations$Station == station,"Summer"] = 
-    sum(data$Start.station.number == station & data$Season == "Summer")
-}
-popular_stations$Total <- popular_stations$Fall + popular_stations$Winter + popular_stations$Spring + popular_stations$Summer
 
+T1 = function(X, y){
+  mean_treatment <- mean(X[y])
+  mean_NO_treatment <- mean(X[!y])
+  return(mean_treatment - mean_NO_treatment)
+}
+
+# This function runs the permutation test using tstatistics 1
+permutation_test <- function(X,y) {
+  nperm = 1000
+  T_realdata = T1(X,y)
+  T_perm = rep(0,nperm)
+  for(i in 1:nperm){
+    perm = sample(dim(X)[1],dim(X)[1]) # scramble the numbers 1 through 560 to scramble the patient labels
+    T_perm[i] = T1(X[perm],y) # this shuffles the rows of X
+  }
+  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+  return(pval)
+}
+
+
+tempars <- seq(40,90)
+col_names <- c()
+for (temp in tempars) {
+  col_names <- c(col_names, paste("p.value", temp, sep="."))
+}
+
+p_results_perm <- matrix(nrow = length(col_names), ncol = 2)
+colnames(p_results_perm) <- c("temp", "p.value")
+p_results_perm$temp <- tempars
+
+
+## NAIVE VERSION WITHOUT DETRENDING OR CONTROLLING FOR ANYTHING and using sums
+for (temp in tempars){
+  data_treat <- data[data$TMP >= tempars,]
+  data_control <- data[data$TMP < tempars,]
+  stations_diff <- data.frame(matrix(nrow = length(stations), ncol = 4))
+  colnames(stations_diff) <- c("Station", "Control", "Treatment", "Diff")
+  stations_diff$Station <- stations
+  for (station in stations) {
+    stations_diff[stations_diff$Station == station, "Control"]  = 
+      sum(data_control$Start.station.number == station)
+    stations_diff[stations_diff$Station == station, "Treatment"]  = 
+      sum(data_treat$Start.station.number == station)
+  }
+  stations_diff$Diff <- stations_diff$Control - stations_diff$Treatment
+  sd <- sd(stations_diff$Diff)
+  t.stat <- (mean(stations_diff$Diff) - 0) / (sd/sqrt(length(stations)))
+  p_results_perm[p_results_perm$temp == temp, p.value] <- 1 - pnorm(t.stat)
+}
 
