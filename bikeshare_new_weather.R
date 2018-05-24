@@ -1,6 +1,7 @@
 ## LIBRARIES
 library("lubridate")
 library("readr")
+install.packages("forecast", dependencies = TRUE)
 library("forecast")
 
 data = NULL
@@ -37,7 +38,7 @@ for(i in unique(c(station_start,station_end))){
 }
 
 
-## FUNCTIONS
+################################# FUNCTIONS ######################################################
 ## Finds Hourly demand
 hourly_demand = function(month, day, hour){
   count = 0 
@@ -73,25 +74,69 @@ hour_int <- function(times, date1, date2) {
   return(trues)
 }
 
+# Statistics 1 - Difference of Means
+# X = Some continous vector, y = treatment vector
+T1 = function(X, y){
+  mean_treatment <- mean(X[y])
+  mean_NO_treatment <- mean(X[!y])
+  return(mean_treatment - mean_NO_treatment)
+}
+
+# Statistics 2 - Correlation
+# X = Some continous vector, y = treatment vector
+T2 = function(X, y){
+  return(cor(X,y))
+}
+
+# Statistics 3 - Difference of Means Test
+# X = Some continous vector, y = treatment vector
+T3 = function(X, y){
+  treat <- X[y]
+  no_treat <- X[!y]
+  mean_treatment <- mean(treat)
+  mean_NO_treatment <- mean(no_treat)
+  var_stat <- var(treat)/treat + var(no_treat)/length(no_treat)
+  t.stat <- (mean_treatment - mean_NO_treatment - 0) / sqrt(var_stat)
+  return(2*pnorm(-abs(t.stat)))
+}
+
+T4 = function(X, y) {
+  
+}
+
+# This function runs the permutation test using T2
+permutation_test <- function(X,y) {
+  nperm = length(X) * .5
+  T_realdata = T2(X,y)
+  T_perm = rep(0,nperm)
+  for(i in 1:nperm){
+    perm = sample(dim(X)[1],dim(X)[1]) # scramble the numbers 1 through 560 to scramble the patient labels
+    T_perm[i] = T2(X[perm],y) # this shuffles the rows of X
+  }
+  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+  return(pval)
+}
+
+
 
 ### SOURCE: http://www.frontierweather.com/historicaldatasubscribers_hourly.html
 weather <- data.frame(read.csv("Desktop/weather.csv"))
 weather$Date <- seq(as.POSIXct("2009-1-1 00:00:00", tz = "UTC"), as.POSIXct("2017-12-31 23:00:00", tz = "UTC"), by="hour")
 weather <- weather[, !(colnames(weather) %in% c("Site", "Hour", "Source"))]
-int = interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2012-01-01", tz = "UTC"))
-weather <- weather[weather$DATE %within% int,] 
-#weather[hour_int(weather$DATE, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2012-01-01", tz = "UTC")))]
-
+#weather[hour_int(weather$Date, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2012-01-01", tz = "UTC")))]
 write.csv(weather, file = "weather_cleaned.csv")
 
+# CAN CHANGE IF YOU WANT TO USE DIFFERENT INTERVALS
+int = interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2012-01-01", tz = "UTC"))
+weather <- weather[weather$Date %within% int,]
 
 start_date = round_date(as.POSIXct(data[1, "Start.date"], tz = "UTC"), "hour")
 end_date = round_date(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"), "hour")
 
 dates_lasso = seq(start_date, end_date, by="hour")
-dates_lasso = as.POSIXct(dates)
-Lasso_data = data.frame(matrix(ncol = 7, nrow = length(dates)))
-colnames(Lasso_data) <- c("Date", "Rides", "WND", "DEW", "VIS", "TMP", "Members")
+dates_lasso = as.POSIXct(dates_lasso)
+Lasso_data = data.frame(matrix(ncol = 7, nrow = length(dates_lasso)))
+colnames(Lasso_data) <- c("Date", "Rides", "Temperature","Dewpoint","RH","WindDir","Windspeed","CldFrac","MSLP","Weather","Precip", "Members")
 Lasso_data[, 1] = dates_lasso
 
 data$Start.date <- as.POSIXct(data$Start.date, tz = "UTC")
@@ -120,9 +165,27 @@ Lasso_data$Weekend <- 0
 Lasso_data[Lasso_data$Day == "Sat", "Weekend"] <- 1
 Lasso_data[Lasso_data$Day == "Sun", "Weekend"] <- 1
 
-Lasso_data[, c("WND", "DEW", "VIS", "TMP")] = weather[, c("WND", "DEW", "VIS", "TMP")] 
+Lasso_data[, c("Temperature","Dewpoint","RH","WindDir","Windspeed","CldFrac","MSLP","Weather","Precip")] <- 
+  weather[, c("Temperature","Dewpoint","RH","WindDir","Windspeed","CldFrac","MSLP","Weather","Precip")]
+
 
 write.csv(Lasso_data, file = "Lasso_data.csv")
+
+# inserts weather into the dataframe. 
+data$TMP <- 0 
+for(i in 1:(length(dates_lasso) -1)) {
+  date1 <- as.POSIXct(dates_lasso[i])
+  date2 <- as.POSIXct(dates_lasso[i+1])
+  int <- interval(date1, date2)
+  data[data$Start.date %within% int, "TMP"] = weather[weather$Date == date1, "Temperature"]
+}
+
+data$Day <- 0 
+data$Day <- wday(data$Date, label = TRUE)
+
+data$Weekend <- 0 
+data[data$Day == "Sat", "Weekend"] <- 1
+data[data$Day == "Sun", "Weekend"] <- 1
 
 
 ## QUESTION: IS THERE A CHANGE IN THE DEMAND FOR A STATION BETWEEN SEASONS
@@ -137,17 +200,13 @@ winter <- interval(as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("20
 data[data$Start.date %within% winter, "Season"] <- "Winter"
 # data[hour_int(data$Start.date, as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")), "Season"] <- "Winter"
 
-
 spring <- interval(as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")) # Spring dates
 data[data$Start.date %within% spring, "Season"] <- "Spring"
 # data[hour_int(data$Start.date, as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")), "Season"] <- "Spring"
 
-
-
 summer <- interval(as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")) # Fall dates
 data[data$Start.date %within% summer, "Season"] <- "Summer"
 # data[hour_int(data$Start.date, as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")), "Season"] <- "Summer"
-
 
 
 
@@ -157,81 +216,103 @@ colnames(popular_stations) <- c("Station", "Fall", "Winter", "Spring", "Summer",
 popular_stations$Station <- stations
 
 
-T1 = function(X, y){
-  mean_treatment <- mean(X[y])
-  mean_NO_treatment <- mean(X[!y])
-  return(mean_treatment - mean_NO_treatment)
-}
-
-T2 = function(X, y){
-  return(cor(X,y))
-}
-
-# This function runs the permutation test using tstatistics 1
-permutation_test <- function(X,y) {
-  nperm = length(X) * .5
-  T_realdata = T2(X,y)
-  T_perm = rep(0,nperm)
-  for(i in 1:nperm){
-    perm = sample(dim(X)[1],dim(X)[1]) # scramble the numbers 1 through 560 to scramble the patient labels
-    T_perm[i] = T2(X[perm],y) # this shuffles the rows of X
-  }
-  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-  return(pval)
-}
-
-
-tempars <- seq(40,90)
-for (temp in tempars) {
+temperatures <- seq(40,90, by  = 5)
+p.names = c()
+for (temp in temperatures) {
   p.names <- c(p.names, paste("p.value", temp, sep="."))
 }
 
-Rdiff_mean <- data.frame(matrix(nrow = length(tempars), ncol = 2))
+
+Rdiff_mean <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
 colnames(Rdiff_mean) <- c("temp", "p.value")
-Rdiff_mean$temp <- tempars
+Rdiff_mean$temp <- temperatures
 
 
-## NAIVE VERSION WITHOUT DETRENDING OR CONTROLLING FOR ANYTHING and using sums
-for (temp in tempars){
-  data_treat <- data[data$TMP >= tempars, c("Start.station.number", "Duration")]
-  data_control <- data[data$TMP < tempars,]
+## NAIVE VERSION WITHOUT DETRENDING OR CONTROLLING FOR ANYTHING and using difference of means test
+for (temp in temperatures){
+  data_treat <- data[data$TMP >= temp, "Start.station.number"]
+  data_control <- data[data$TMP < temp, "Start.station.number"]
   stations_diff <- data.frame(matrix(nrow = length(stations), ncol = 4))
   colnames(stations_diff) <- c("Station", "Control", "Treatment", "Diff")
   stations_diff$Station <- stations
   for (station in stations) {
     stations_diff[stations_diff$Station == station, "Control"]  = 
-      sum(data_control$Start.station.number == station)
+      sum(data_control == station)
     stations_diff[stations_diff$Station == station, "Treatment"]  = 
-      sum(data_treat$Start.station.number == station)
+      sum(data_treat == station)
   }
-  stations_diff$Diff <- stations_diff$Control - stations_diff$Treatment
+  stations_diff$Diff <- stations_diff$Treatment - stations_diff$Control
   n_stat <- length(stations)
   var_stat <- var(stations_diff$Control)/n_stat + var(stations_diff$Treatment)/n_stat
   t.stat <- (mean(stations_diff$Diff) - 0) / sqrt(var_stat)
-  Rdiff_mean[Rdiff_mean$temp == temp, "p.value"] <- 1 - pnorm(t.stat)
+  Rdiff_mean[Rdiff_mean$temp == temp, "p.value"] <- 2*pnorm(-abs(t.stat))
 }
 
 
-
-## USING DURATION AS A MEASUREMENT OF BIKE USAGE
-Rduration <- data.frame(matrix(nrow = length(stations), ncol = (1+length(p.names))))
+## USING DURATION AS A MEASUREMENT OF BIKE USAGE - NAIVE (for stations)
+Rduration <- data.frame(matrix(nrow = length(stations), ncol = (1+length(temperatures))))
 colnames(Rduration) <- c("Station", p.names)
 Rduration$Station <- stations
 
-for (temp in tempars){
-  data_treat <- data[data$TMP >= tempars, c("Start.station.number", "Duration")]
-  data_control <- data[data$TMP < tempars, c("Start.station.number", "Duration")]
+for (temp in temperatures){
+  data_treat <- data[data$TMP >= temp, c("Start.station.number", "Duration")]
+  data_control <- data[data$TMP < temp, c("Start.station.number", "Duration")]
 
   for (station in stations) {
     X_1 <- data_treat[data_treat$Start.station.number == station, "Duration"]
     X_2 <- data_control[data_control$Start.station.number == station, "Duration"]
-    y <- c(rep(1, dim(X_1)), rep(1, dim(X_2)))
+    y <- c(rep(1, length(X_1)), rep(0, length(X_2)))
     X <- c(X_1, X_2)
     Rduration[Rduration$Station == station, paste("p.value", temp, sep=".")] = permutation_test(X, y)
   }
-  stations_diff$Diff <- stations_diff$Control - stations_diff$Treatment
-  n_stat <- length(stations)
-  var_stat <- var(stations_diff$Control)/n_stat + var(stations_diff$Treatment)/n_stat
-  t.stat <- (mean(stations_diff$Diff) - 0) / sqrt(var_stat)
-  p_results_perm[p_results_perm$temp == temp, p.value] <- 1 - pnorm(t.stat)
+}
+
+
+## USING DURATION AS A MEASUREMENT OF BIKE USAGE - NAIVE (for everything)
+naive_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
+colnames(naive_results) <- c("Temperature", "p.value")
+naive_results$Temperature <- temperatures
+trunc_data <- data[, c("TMP", "Duration")]
+nperm = 100
+for (temp in temperatures) {
+  X_1 <- trunc_data[trunc_data$TMP >= temp, "Duration"]
+  X_2 <- trunc_data[trunc_data$TMP < temp, "Duration"]
+  y <- c(rep(1, length(X_1)), rep(0, length(X_2)))
+  X <- c(X_1, X_2)
+  T_realdata = T2(X,y)
+  T_perm = rep(0,nperm)
+  for(i in 1:nperm){
+    perms <- sample(dim(trunc_data)[1], dim(trunc_data)[1])
+    y <- y[perms]
+    T_perm[i] <- T2(X, y)
+  }
+  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+  naive_results[naive_results$Temperature == temp, "p.value"] = pval
+}
+
+## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY SEASON
+seasonal_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
+colnames(seasonal_perm_results) <- c("Temperature", "p.value")
+seasonal_perm_results$Temperature <- temperatures
+trunc_data <- data[, c("TMP", "Duration", "Season")]
+nperm = 100
+for (temp in temperatures) {
+  X_1 <- trunc_data[trunc_data$TMP >= temp, "Duration"]
+  X_2 <- trunc_data[trunc_data$TMP < temp, "Duration"]
+  treatment <- data.frame(c(rep(1, length(X_1)), rep(0, length(X_2))), trunc_data$Season)
+  colnames(treatment) <- c("y", "Season")
+  X <- c(X_1, X_2)
+  T_realdata = T2(X,treatment$y)
+  T_perm = rep(0,nperm)
+  for(i in 1:nperm) {
+    garbage <- treatment
+    for (season in c("Fall", "Winter", "Spring", "Summer")) {
+      condition_vec <- (garbage$Season == season)
+      perms <- sample(sum(condition_vec), sum(garbage$Season == season))
+      garbage[condition_vec, "y"] <- (garbage[condition_vec, "y"][perms])
+    }
+    T_perm[i] <- T2(X, garbage$y)
+  }
+  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+  seasonal_perm_results[seasonal_perm_results$Temperature == temp, "p.value"] = pval
 }
