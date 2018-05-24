@@ -29,8 +29,17 @@ for(station in stations) {
   winner <- route_counter[route_counter$Count == max(route_counter$Count), "End.Station"]
   second_place <- sort(route_counter$Count, decreasing = TRUE)[2]
   total <- sum(route_counter$Count)
-  subset_total <- total - sum(sort(route_counter$Count, decreasing = TRUE)[c(-1,-2)])
-  
-  
+  subset_total <- total - sum(sort(route_counter$Count, decreasing = TRUE)[c(-1,-2)])  
 }
 
+for (station in stations) {
+  popular_stations[popular_stations$Station == station,"Fall"] = 
+    sum(data$Start.station.number == station & data$Season == "Fall")
+  popular_stations[popular_stations$Station == station,"Winter"] = 
+    sum(data$Start.station.number == station & data$Season == "Winter")
+  popular_stations[popular_stations$Station == station,"Spring"] = 
+    sum(data$Start.station.number == station & data$Season == "Spring")
+  popular_stations[popular_stations$Station == station,"Summer"] = 
+    sum(data$Start.station.number == station & data$Season == "Summer")
+}
+popular_stations$Total <- popular_stations$Fall + popular_stations$Winter + popular_stations$Spring + popular_stations$Summer
