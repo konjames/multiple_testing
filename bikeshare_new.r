@@ -36,6 +36,7 @@ for(i in unique(c(station_start,station_end))){
   stations = rbind(stations,c(i,location))
 }
 
+write.csv(data, file = "cleaned_data.csv")
 
 ## FUNCTIONS
 ## Finds Hourly demand
@@ -67,6 +68,13 @@ Holiday_check = function(date) {
   }
 }
 
+## This function rounds times down to the hour. 
+round_down = function(times) {
+  secs <- as.POSIXlt(times, tz = "UTC")$sec
+  mins <- as.POSIXlt(times, tz = "UTC")$min
+  return(as.POSIXlt(times, tz = "UTC") - (mins*60) - secs)
+}
+
 
 ## Download weather data of Washing Reagan Airport 2017 (WRONG YEAR BUT WILL CHANGE TOMORROW)
 weather <- read_csv("reaganairport.csv")
@@ -91,15 +99,18 @@ for (i in 1:(length(dates) - 1)) {
   if(!is.infinite(minimum)) {
     weather <- weather[ !((weather$DATE %within% int) & 
                             weather$DATE != minimum),] 
+    #weather <- weather[ -which((weather$DATE %within% int) & weather$DATE != minimum),] 
   }
 }
+weather$DATE = round_down(weather$DATE)
 
-weather$DATE = round_date(as.POSIXct(weather$DATE, tz = "UTC"), "hour")
 write.csv(weather, file = "weather_cleaned.csv")
-weather <- weather[weather$DATE < as.POSIXct("2012-01-01", tz = "UTC"),]
 
 start_date = round_date(as.POSIXct(data[1, "Start.date"], tz = "UTC"), "hour")
-end_date = round_date(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"), "hour")
+end_date = round_date(as.POSIXct("2012-1-1 23:00:00", tz = "UTC"), "hour")
+weather <- weather[weather$DATE <= as.POSIXct("2011-12-31 23:00:00", tz = "UTC"),] # USE IF NOT WORKING weather <- weather[weather$DATE < as.POSIXct("2012-01-01", tz = "UTC"),]
+
+
 
 dates_lasso = seq(start_date, end_date, by="hour")
 dates_lasso = as.POSIXct(dates)
@@ -108,6 +119,7 @@ colnames(Lasso_data) <- c("Date", "Rides", "WND", "DEW", "VIS", "TMP", "Members"
 Lasso_data[, 1] = dates_lasso
 
 data$Start.date <- as.POSIXct(data$Start.date, tz = "UTC")
+data$TMP <- 0 
 for(i in 1:(length(dates_lasso) -1)) {
   date1 <- as.POSIXct(dates_lasso[i])
   date2 <- as.POSIXct(dates_lasso[i+1])
@@ -116,7 +128,9 @@ for(i in 1:(length(dates_lasso) -1)) {
   #Lasso_data[Lasso_data$Date == date1, "Members"] = dim(data[data$Start.date %within% int & data$Member.type == "Member",])[1]
   Lasso_data[Lasso_data$Date == date1, "Members"] = sum(data$Start.date %within% int & data$Member.type == "Member")
   Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(data$Start.date %within% int)
+  data[data$Start.date %within% int, "TMP"] <- weather[weather$DATE == date1, "TMP"]
 }
+write.csv(data, file = "cleaned_data.csv")
 
 #FOR HOLIDAY INDICATOR
 Lasso_data[,"Holiday"] <- 0 
@@ -155,6 +169,7 @@ data[data$Start.date %within% summer, "Season"] <- "Summer"
 
 
 
+
 stations <- levels(as.factor(data$Start.station.number))
 popular_stations <- data.frame(matrix(nrow = length(stations), ncol = 6))
 colnames(popular_stations) <- c("Station", "Fall", "Winter", "Spring", "Summer", "Total")
@@ -167,10 +182,14 @@ T1 = function(X, y){
   return(mean_treatment - mean_NO_treatment)
 }
 
+T2 = function(X, y){
+  return(cor(X,y))
+}
+
 # This function runs the permutation test using tstatistics 1
 permutation_test <- function(X,y) {
-  nperm = 1000
-  T_realdata = T1(X,y)
+  nperm = length(X) * .5
+  T_realdata = T2(X,y)
   T_perm = rep(0,nperm)
   for(i in 1:nperm){
     perm = sample(dim(X)[1],dim(X)[1]) # scramble the numbers 1 through 560 to scramble the patient labels
@@ -182,19 +201,18 @@ permutation_test <- function(X,y) {
 
 
 tempars <- seq(40,90)
-col_names <- c()
 for (temp in tempars) {
-  col_names <- c(col_names, paste("p.value", temp, sep="."))
+  p.names <- c(p.names, paste("p.value", temp, sep="."))
 }
 
-p_results_perm <- matrix(nrow = length(col_names), ncol = 2)
-colnames(p_results_perm) <- c("temp", "p.value")
-p_results_perm$temp <- tempars
+Rdiff_mean <- data.frame(matrix(nrow = length(tempars), ncol = 2))
+colnames(Rdiff_mean) <- c("temp", "p.value")
+Rdiff_mean$temp <- tempars
 
 
 ## NAIVE VERSION WITHOUT DETRENDING OR CONTROLLING FOR ANYTHING and using sums
 for (temp in tempars){
-  data_treat <- data[data$TMP >= tempars,]
+  data_treat <- data[data$TMP >= tempars, c("Start.station.number", "Duration")]
   data_control <- data[data$TMP < tempars,]
   stations_diff <- data.frame(matrix(nrow = length(stations), ncol = 4))
   colnames(stations_diff) <- c("Station", "Control", "Treatment", "Diff")
@@ -206,8 +224,32 @@ for (temp in tempars){
       sum(data_treat$Start.station.number == station)
   }
   stations_diff$Diff <- stations_diff$Control - stations_diff$Treatment
-  sd <- sd(stations_diff$Diff)
-  t.stat <- (mean(stations_diff$Diff) - 0) / (sd/sqrt(length(stations)))
+  n_stat <- length(stations)
+  var_stat <- var(stations_diff$Control)/n_stat + var(stations_diff$Treatment)/n_stat
+  t.stat <- (mean(stations_diff$Diff) - 0) / sqrt(var_stat)
+  Rdiff_mean[Rdiff_mean$temp == temp, "p.value"] <- 1 - pnorm(t.stat)
+}
+
+
+
+## USING DURATION AS A MEASUREMENT OF BIKE USAGE
+Rduration <- data.frame(matrix(nrow = length(stations), ncol = (1+length(p.names))))
+colnames(Rduration) <- c("station", p.names)
+Rduration$stations <- stations
+
+for (temp in tempars){
+  data_treat <- data[data$TMP >= tempars, c("Start.station.number", "Duration")]
+  data_control <- data[data$TMP < tempars, c("Start.station.number", "Duration")]
+
+  for (station in stations) {
+    X_1 <- data_treat[data_treat$Start.station.number == station, "Duration"]
+    X_2 <- data_treat[data_treat$Start.station.number == station, "Duration"]
+    y <- rep()
+  }
+  stations_diff$Diff <- stations_diff$Control - stations_diff$Treatment
+  n_stat <- length(stations)
+  var_stat <- var(stations_diff$Control)/n_stat + var(stations_diff$Treatment)/n_stat
+  t.stat <- (mean(stations_diff$Diff) - 0) / sqrt(var_stat)
   p_results_perm[p_results_perm$temp == temp, p.value] <- 1 - pnorm(t.stat)
 }
 
