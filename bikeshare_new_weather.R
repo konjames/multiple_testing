@@ -179,6 +179,7 @@ for(i in 1:(length(dates_lasso) -1)) {
   int <- interval(date1, date2)
   data[data$Start.date %within% int, "TMP"] = weather[weather$Date == date1, "Temperature"]
 }
+data$TMP_bins <- data$TMP - (data$TMP %%  10)
 
 data$Day <- 0 
 data$Day <- wday(data$Date, label = TRUE)
