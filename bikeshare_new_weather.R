@@ -108,7 +108,7 @@ T4 = function(X, y) {
 
 # This function runs the permutation test using T2
 permutation_test <- function(X,y) {
-  nperm = length(X) * .5
+  nperm = 1000
   T_realdata = T2(X,y)
   T_perm = rep(0,nperm)
   for(i in 1:nperm){
@@ -223,7 +223,7 @@ colnames(popular_stations) <- c("Station", "Fall", "Winter", "Spring", "Summer",
 popular_stations$Station <- stations
 
 
-temperatures <- seq(40,90, by  = 5)
+temperatures <- seq(40,90, by  = 10)
 p.names = c()
 for (temp in temperatures) {
   p.names <- c(p.names, paste("p.value", temp, sep="."))
@@ -276,8 +276,8 @@ colnames(naive_results) <- c("Temperature", "p.value")
 naive_results$Temperature <- temperatures
 nperm = 100
 for (temp in temperatures) {
-  X <- trunc_data$Duration
-  y <- trunc_data$TMP_bins
+  X <- data$Duration
+  y <- data$TMP_bins
   T_realdata = T2(X,y)
   T_perm = rep(0,nperm)
   for(i in 1:nperm){
@@ -296,7 +296,7 @@ seasonal_perm_results$Temperature <- temperatures
 nperm = 100
 for (temp in temperatures) {
   X <- data$Duration
-  treatment <- trunc_data[, c("bins_temp", "Season")]
+  treatment <- data[, c("bins_temp", "Season")]
   colnames(treatment) <- c("temp", "Season")
   T_realdata = T2(X,treatment$temp)
   T_perm = rep(0,nperm)
@@ -311,6 +311,31 @@ for (temp in temperatures) {
   }
   pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
   seasonal_perm_results[seasonal_perm_results$Temperature == temp, "p.value"] = pval
+}
+
+## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY Month
+data$Month <- as.POSIXlt(data$Date)$mon
+month_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
+colnames(seasonal_perm_results) <- c("Temperature", "p.value")
+month_perm_results$Temperature <- temperatures
+nperm = 100
+for (temp in temperatures) {
+  X <- data$Duration
+  treatment <- data[, c("bins_temp", "Month")]
+  colnames(treatment) <- c("temp", "Month")
+  T_realdata = T2(X,treatment$bins_temp)
+  T_perm = rep(0,nperm)
+  for(i in 1:nperm) {
+    garbage <- treatment
+    for (mon in 0:11) {
+      condition_vec <- (garbage$Month == mon)
+      perms <- sample(sum(condition_vec), sum(condition_vec))
+      garbage[condition_vec, "temp"] <- (garbage[condition_vec, "temp"][perms])
+    }
+    T_perm[i] <- T2(X, garbage$temp)
+  }
+  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+  month_perm_results[seasonal_perm_results$Temperature == temp, "p.value"] = pval
 }
 
 
