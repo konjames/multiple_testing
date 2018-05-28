@@ -1,3 +1,5 @@
+setwd("~/Desktop")
+
 ## LIBRARIES
 library("lubridate")
 library("readr")
@@ -110,13 +112,19 @@ permutation_test <- function(X,y) {
   T_realdata = T2(X,y)
   T_perm = rep(0,nperm)
   for(i in 1:nperm){
-    perm = sample(dim(X)[1],dim(X)[1]) # scramble the numbers 1 through 560 to scramble the patient labels
+    perm = sample(length(X),length(X)) # scramble the numbers 1 through 560 to scramble the patient labels
     T_perm[i] = T2(X[perm],y) # this shuffles the rows of X
   }
   pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
   return(pval)
 }
 
+## This function rounds times down to the hour. 
+round_down = function(times) {
+  secs <- as.POSIXlt(times, tz = "UTC")$sec
+  mins <- as.POSIXlt(times, tz = "UTC")$min
+  return(as.POSIXlt(times, tz = "UTC") - (mins*60) - secs)
+}
 
 
 ### SOURCE: http://www.frontierweather.com/historicaldatasubscribers_hourly.html
@@ -135,7 +143,7 @@ end_date = round_date(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"), 
 
 dates_lasso = seq(start_date, end_date, by="hour")
 dates_lasso = as.POSIXct(dates_lasso)
-Lasso_data = data.frame(matrix(ncol = 7, nrow = length(dates_lasso)))
+Lasso_data = data.frame(matrix(ncol = 12, nrow = length(dates_lasso)))
 colnames(Lasso_data) <- c("Date", "Rides", "Temperature","Dewpoint","RH","WindDir","Windspeed","CldFrac","MSLP","Weather","Precip", "Members")
 Lasso_data[, 1] = dates_lasso
 
@@ -167,9 +175,8 @@ Lasso_data[Lasso_data$Day == "Sun", "Weekend"] <- 1
 
 Lasso_data[, c("Temperature","Dewpoint","RH","WindDir","Windspeed","CldFrac","MSLP","Weather","Precip")] <- 
   weather[, c("Temperature","Dewpoint","RH","WindDir","Windspeed","CldFrac","MSLP","Weather","Precip")]
-
-
 write.csv(Lasso_data, file = "Lasso_data.csv")
+
 
 # inserts weather into the dataframe. 
 data$TMP <- 0 
@@ -208,7 +215,6 @@ data[data$Start.date %within% spring, "Season"] <- "Spring"
 summer <- interval(as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")) # Fall dates
 data[data$Start.date %within% summer, "Season"] <- "Summer"
 # data[hour_int(data$Start.date, as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")), "Season"] <- "Summer"
-
 
 
 stations <- levels(as.factor(data$Start.station.number))
@@ -256,14 +262,9 @@ colnames(Rduration) <- c("Station", p.names)
 Rduration$Station <- stations
 
 for (temp in temperatures){
-  data_treat <- data[data$TMP >= temp, c("Start.station.number", "Duration")]
-  data_control <- data[data$TMP < temp, c("Start.station.number", "Duration")]
-
   for (station in stations) {
-    X_1 <- data_treat[data_treat$Start.station.number == station, "Duration"]
-    X_2 <- data_control[data_control$Start.station.number == station, "Duration"]
-    y <- c(rep(1, length(X_1)), rep(0, length(X_2)))
-    X <- c(X_1, X_2)
+    X <- data[data$Start.station.number == station, "Duration"]
+    y <- data[data$Start.station.number == station, "TMP_bins"]
     Rduration[Rduration$Station == station, paste("p.value", temp, sep=".")] = permutation_test(X, y)
   }
 }
@@ -273,19 +274,16 @@ for (temp in temperatures){
 naive_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
 colnames(naive_results) <- c("Temperature", "p.value")
 naive_results$Temperature <- temperatures
-trunc_data <- data[, c("TMP", "Duration")]
 nperm = 100
 for (temp in temperatures) {
-  X_1 <- trunc_data[trunc_data$TMP >= temp, "Duration"]
-  X_2 <- trunc_data[trunc_data$TMP < temp, "Duration"]
-  y <- c(rep(1, length(X_1)), rep(0, length(X_2)))
-  X <- c(X_1, X_2)
+  X <- trunc_data$Duration
+  y <- trunc_data$TMP_bins
   T_realdata = T2(X,y)
   T_perm = rep(0,nperm)
   for(i in 1:nperm){
-    perms <- sample(dim(trunc_data)[1], dim(trunc_data)[1])
-    y <- y[perms]
-    T_perm[i] <- T2(X, y)
+    perms <- sample(length(y), length(y))
+    garbage <- y[perms]
+    T_perm[i] <- T2(X, garbage)
   }
   pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
   naive_results[naive_results$Temperature == temp, "p.value"] = pval
@@ -295,25 +293,29 @@ for (temp in temperatures) {
 seasonal_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
 colnames(seasonal_perm_results) <- c("Temperature", "p.value")
 seasonal_perm_results$Temperature <- temperatures
-trunc_data <- data[, c("TMP", "Duration", "Season")]
 nperm = 100
 for (temp in temperatures) {
-  X_1 <- trunc_data[trunc_data$TMP >= temp, "Duration"]
-  X_2 <- trunc_data[trunc_data$TMP < temp, "Duration"]
-  treatment <- data.frame(c(rep(1, length(X_1)), rep(0, length(X_2))), trunc_data$Season)
-  colnames(treatment) <- c("y", "Season")
-  X <- c(X_1, X_2)
-  T_realdata = T2(X,treatment$y)
+  X <- data$Duration
+  treatment <- trunc_data[, c("bins_temp", "Season")]
+  colnames(treatment) <- c("temp", "Season")
+  T_realdata = T2(X,treatment$temp)
   T_perm = rep(0,nperm)
   for(i in 1:nperm) {
     garbage <- treatment
     for (season in c("Fall", "Winter", "Spring", "Summer")) {
       condition_vec <- (garbage$Season == season)
-      perms <- sample(sum(condition_vec), sum(garbage$Season == season))
-      garbage[condition_vec, "y"] <- (garbage[condition_vec, "y"][perms])
+      perms <- sample(sum(condition_vec), sum(condition_vec))
+      garbage[condition_vec, "temp"] <- (garbage[condition_vec, "temp"][perms])
     }
-    T_perm[i] <- T2(X, garbage$y)
+    T_perm[i] <- T2(X, garbage$temp)
   }
   pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
   seasonal_perm_results[seasonal_perm_results$Temperature == temp, "p.value"] = pval
 }
+
+
+#### GEOLOCATION 
+library("sf")
+library("tmap")
+library("tidyverse")
+sales <- read_csv("Desktop/sales-tidy.csv")
