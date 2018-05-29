@@ -1,5 +1,5 @@
 setwd("~/Desktop")
-
+# setwd("~/Desktop/multiple_testing-master")
 ## LIBRARIES
 library("lubridate")
 library("readr")
@@ -38,7 +38,6 @@ for(i in unique(c(station_start,station_end))){
   }
   stations = rbind(stations,c(i,location))
 }
-
 
 ################################# FUNCTIONS ######################################################
 ## Finds Hourly demand
@@ -135,11 +134,11 @@ weather <- weather[, !(colnames(weather) %in% c("Site", "Hour", "Source"))]
 write.csv(weather, file = "weather_cleaned.csv")
 
 # CAN CHANGE IF YOU WANT TO USE DIFFERENT INTERVALS
-int = interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2012-01-01", tz = "UTC"))
-weather <- weather[weather$Date %within% int,]
-
-start_date = round_date(as.POSIXct(data[1, "Start.date"], tz = "UTC"), "hour")
-end_date = round_date(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"), "hour")
+#int = interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2012-01-01", tz = "UTC"))
+#weather <- weather[weather$Date %within% int,]
+weather <- weather[hour_int(weather$Date, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")),]
+start_date = round_down(as.POSIXct(data[1, "Start.date"], tz = "UTC"))
+end_date = round_down(as.POSIXct(data[dim(data)[1], "Start.date"], tz = "UTC"))
 
 dates_lasso = seq(start_date, end_date, by="hour")
 dates_lasso = as.POSIXct(dates_lasso)
@@ -148,21 +147,21 @@ colnames(Lasso_data) <- c("Date", "Rides", "Temperature","Dewpoint","RH","WindDi
 Lasso_data[, 1] = dates_lasso
 
 data$Start.date <- as.POSIXct(data$Start.date, tz = "UTC")
-for(i in 1:(length(dates_lasso) -1)) {
-  date1 <- as.POSIXct(dates_lasso[i])
-  date2 <- as.POSIXct(dates_lasso[i+1])
-  int <- interval(date1, date2)
-  Lasso_data[Lasso_data$Date == date1, "Members"] = sum(data$Start.date %within% int & data$Member.type == "Member")
-  Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(data$Start.date %within% int)
+for(i in 1:(length(dates_lasso)-1)) {
+  date1 <- as.POSIXct(dates_lasso[i], tz = "UTC")
+  date2 <- as.POSIXct(dates_lasso[i+1], tz = "UTC")
+  #int <- interval(date1, date2)
+  #Lasso_data[Lasso_data$Date == date1, "Members"] = sum(data$Start.date %within% int & data$Member.type == "Member")
+  #Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(data$Start.date %within% int)
 
-  #Lasso_data[Lasso_data$Date == date1, "Members"] = sum(hour_int(data$Date, date1, date2) & data$Member.type == "Member")
-  #Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(hour_int(data$Date, date1, date2))
+  Lasso_data[Lasso_data$Date == date1, "Members"] = sum(hour_int(data$Start.date, date1, date2) & data$Member.type == "Member")
+  Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(hour_int(data$Start.date, date1, date2))
 }
 
 #FOR HOLIDAY INDICATOR
-Lasso_data[,"Holiday"] <- 0 
+Lasso_data[,"Holiday"] <- 0
 for (i in 1:(length(dates_lasso) -1)) {
-  Lasso_data[i,"Holiday"] <- Holiday_check(as.POSIXct(dates_lasso[i]))
+  Lasso_data[i,"Holiday"] <- Holiday_check(as.POSIXct(dates_lasso[i], tz = "UTC"))
 }
 
 ## FOR DAY INDICATOR
@@ -181,15 +180,16 @@ write.csv(Lasso_data, file = "Lasso_data.csv")
 # inserts weather into the dataframe. 
 data$TMP <- 0 
 for(i in 1:(length(dates_lasso) -1)) {
-  date1 <- as.POSIXct(dates_lasso[i])
-  date2 <- as.POSIXct(dates_lasso[i+1])
-  int <- interval(date1, date2)
-  data[data$Start.date %within% int, "TMP"] = weather[weather$Date == date1, "Temperature"]
+  date1 <- as.POSIXct(dates_lasso[i], tz = "UTC")
+  date2 <- as.POSIXct(dates_lasso[i+1], tz = "UTC")
+  #int <- interval(date1, date2)
+  #data[data$Start.date %within% int, "TMP"] = weather[weather$Date == date1, "Temperature"]
+  data[hour_int(data$Start.date, date1, date2), "TMP"] = weather[weather$Date == date1, "Temperature"]
 }
 data$TMP_bins <- data$TMP - (data$TMP %%  10)
 
 data$Day <- 0 
-data$Day <- wday(data$Date, label = TRUE)
+data$Day <- wday(data$Start.date, label = TRUE)
 
 data$Weekend <- 0 
 data[data$Day == "Sat", "Weekend"] <- 1
@@ -199,22 +199,22 @@ data[data$Day == "Sun", "Weekend"] <- 1
 ## QUESTION: IS THERE A CHANGE IN THE DEMAND FOR A STATION BETWEEN SEASONS
 ## TEST: USING DIFFERENT OF MEANS NORMAL DISTRIBUTION: USE PERMUTATION TEST 
 data$Season <- "Fall"
-data$Start.date <- as.POSIXct(data$Start.date)
-winter <- interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")) # Winter dates
-data[data$Start.date %within% winter, "Season"] <- "Winter"
-# data[hour_int(data$Start.date, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")), "Season"] <- "Winter"
+data$Start.date <- as.POSIXct(data$Start.date, tz = "UTC")
+#winter <- interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")) # Winter dates
+#data[data$Start.date %within% winter, "Season"] <- "Winter"
+data[hour_int(data$Start.date, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")), "Season"] <- "Winter"
 
-winter <- interval(as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")) # Winter dates
-data[data$Start.date %within% winter, "Season"] <- "Winter"
-# data[hour_int(data$Start.date, as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")), "Season"] <- "Winter"
+#winter <- interval(as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")) # Winter dates
+#data[data$Start.date %within% winter, "Season"] <- "Winter"
+data[hour_int(data$Start.date, as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")), "Season"] <- "Winter"
 
-spring <- interval(as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")) # Spring dates
-data[data$Start.date %within% spring, "Season"] <- "Spring"
-# data[hour_int(data$Start.date, as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")), "Season"] <- "Spring"
+#spring <- interval(as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")) # Spring dates
+#data[data$Start.date %within% spring, "Season"] <- "Spring"
+data[hour_int(data$Start.date, as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")), "Season"] <- "Spring"
 
-summer <- interval(as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")) # Fall dates
-data[data$Start.date %within% summer, "Season"] <- "Summer"
-# data[hour_int(data$Start.date, as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")), "Season"] <- "Summer"
+#summer <- interval(as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")) # Fall dates
+#data[data$Start.date %within% summer, "Season"] <- "Summer"
+data[hour_int(data$Start.date, as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")), "Season"] <- "Summer"
 
 
 stations <- levels(as.factor(data$Start.station.number))
@@ -293,10 +293,10 @@ for (temp in temperatures) {
 seasonal_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
 colnames(seasonal_perm_results) <- c("Temperature", "p.value")
 seasonal_perm_results$Temperature <- temperatures
-nperm = 100
+nperm = 1000
 for (temp in temperatures) {
   X <- data$Duration
-  treatment <- data[, c("bins_temp", "Season")]
+  treatment <- data[, c("TMP_bins", "Season")]
   colnames(treatment) <- c("temp", "Season")
   T_realdata = T2(X,treatment$temp)
   T_perm = rep(0,nperm)
@@ -314,16 +314,16 @@ for (temp in temperatures) {
 }
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY Month
-data$Month <- as.POSIXlt(data$Date)$mon
+data$Month <- as.POSIXlt(data$Start.date, tz = "UTC")$mon
 month_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
 colnames(seasonal_perm_results) <- c("Temperature", "p.value")
 month_perm_results$Temperature <- temperatures
-nperm = 100
+nperm = 1000 
 for (temp in temperatures) {
   X <- data$Duration
-  treatment <- data[, c("bins_temp", "Month")]
+  treatment <- data[, c("TMP_bins", "Month")]
   colnames(treatment) <- c("temp", "Month")
-  T_realdata = T2(X,treatment$bins_temp)
+  T_realdata = T2(X,treatment$temp)
   T_perm = rep(0,nperm)
   for(i in 1:nperm) {
     garbage <- treatment
@@ -335,12 +335,36 @@ for (temp in temperatures) {
     T_perm[i] <- T2(X, garbage$temp)
   }
   pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-  month_perm_results[seasonal_perm_results$Temperature == temp, "p.value"] = pval
+  month_perm_results[month_perm_results$Temperature == temp, "p.value"] = pval
 }
 
 
 #### GEOLOCATION 
+# install.packages("sf", dependencies = TRUE)
+# install.packages("tmap", dependencies = TRUE)
+# install.packages("tidyverse", dependencies = TRUE)
+
 library("sf")
 library("tmap")
 library("tidyverse")
-sales <- read_csv("Desktop/sales-tidy.csv")
+library("dplyr")
+
+zipcodes <- st_read("Desktop/Zip_codes.shp")
+Lanes <- st_read("Desktop/Bicycle_Lanes.shp")
+bikes <- st_read("Bike_Locations.shp")
+
+tm_shape(zipcodes) +
+  tm_borders() + 
+  tm_fill("Zipcodes", palette = "Blue", 
+          title = "Map of Bikes Stops in Zipcodes") +
+tm_shape(bikes) +
+  tm_dots(title = "Bike Stops", size = 0.1, col = "black") +
+tm_shape(Lanes) +
+  tm_lines(col="dodgerblue3")
+
+zipcodes %>% 
+  st_join(bikes, .) %>% 
+  group_by(zipcodes) %>% 
+  tally() %>%
+  arrange(desc(n))
+
