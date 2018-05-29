@@ -153,7 +153,7 @@ for(i in 1:(length(dates_lasso)-1)) {
   #int <- interval(date1, date2)
   #Lasso_data[Lasso_data$Date == date1, "Members"] = sum(data$Start.date %within% int & data$Member.type == "Member")
   #Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(data$Start.date %within% int)
-
+  
   Lasso_data[Lasso_data$Date == date1, "Members"] = sum(hour_int(data$Start.date, date1, date2) & data$Member.type == "Member")
   Lasso_data[Lasso_data$Date == date1, "Rides"] = sum(hour_int(data$Start.date, date1, date2))
 }
@@ -343,28 +343,37 @@ for (temp in temperatures) {
 # install.packages("sf", dependencies = TRUE)
 # install.packages("tmap", dependencies = TRUE)
 # install.packages("tidyverse", dependencies = TRUE)
+# install.packages("LearnBayes")
+# install.packages("tidycensus")
+# install.packages("gdata")
 
+library(rgdal)
 library("sf")
 library("tmap")
 library("tidyverse")
 library("dplyr")
+library("sp")
+library("tidycensus")
+library("raster")
 
-zipcodes <- st_read("Desktop/Zip_codes.shp")
-Lanes <- st_read("Desktop/Bicycle_Lanes.shp")
-bikes <- st_read("Bike_Locations.shp")
+zipcodes <- st_read("Desktop/Zip_Codes/Zip_Codes.shp")
+lanes <- st_read("Desktop/Bicycle_Lanes/Bicycle_Lanes.shp")
+bikes <- st_read("Desktop/mygeodata/Bike_Locations.shp")
+bikes = st_transform(bikes, st_crs(zipcodes))
+bounds <- as.matrix(extent(zipcodes))
+bikes[(bikes$LATITUDE >= bounds["y", "min"] & bikes$LATITUDE <= bounds["y", "max"]),]
+bikes[(bikes$LONGITUDE >= bounds["x", "min"] & bikes$LONGITUDE <= bounds["x", "max"]),]
+
+d <- data.frame(lon=bikes$LONGITUDE, lat=bikes$LATITUDE)
+coordinates(d) <- c("lon", "lat")
+proj4string(d) <- CRS("+init=epsg:4326") # WGS 84
+
 
 tm_shape(zipcodes) +
   tm_borders() + 
-  tm_fill("Zipcodes", palette = "Blue", 
-          title = "Map of Bikes Stops in Zipcodes") +
-tm_shape(bikes) +
-  tm_dots(title = "Bike Stops", size = 0.1, col = "black") +
+  tm_fill("ZIPCODE", palette = "RdYlGn", title = "Map of Bikes Stops in Zipcodes") +
 tm_shape(Lanes) +
-  tm_lines(col="dodgerblue3")
-
-zipcodes %>% 
-  st_join(bikes, .) %>% 
-  group_by(zipcodes) %>% 
-  tally() %>%
-  arrange(desc(n))
+    tm_lines(col="dodgerblue3") + 
+tm_shape(d) +
+  tm_bubbles(size = .1, col = "red")
 
