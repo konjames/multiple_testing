@@ -74,3 +74,44 @@ for (i in 1:(length(dates) - 1)) {
 }
 
 weather$DATE = round_date(as.POSIXct(weather$DATE, tz = "UTC"), "hour")
+
+
+#### GEOLOCATION PROJECT FAILED
+# install.packages("sf", dependencies = TRUE)
+# install.packages("tmap", dependencies = TRUE)
+# install.packages("tidyverse", dependencies = TRUE)
+# install.packages("LearnBayes")
+# install.packages("tidycensus")
+# install.packages("gdata")
+
+library("rgdal")
+library("sf")
+library("tmap")
+library("tidyverse")
+library("dplyr")
+library("sp")
+library("tidycensus")
+library("raster")
+
+zipcodes <- st_read("Desktop/Zip_Codes/Zip_Codes.shp")
+lanes <- st_read("Desktop/Bicycle_Lanes/Bicycle_Lanes.shp")
+bikes <- st_read("Desktop/mygeodata/Bike_Locations.shp")
+bikes = st_transform(bikes, st_crs(zipcodes))
+bounds <- as.matrix(extent(zipcodes))
+bikes[(bikes$LATITUDE >= bounds["y", "min"] & bikes$LATITUDE <= bounds["y", "max"]),]
+bikes[(bikes$LONGITUDE >= bounds["x", "min"] & bikes$LONGITUDE <= bounds["x", "max"]),]
+
+d <- data.frame(lon=bikes$LONGITUDE, lat=bikes$LATITUDE)
+coordinates(d) <- c("lon", "lat")
+proj4string(d) <- CRS("+init=epsg:4326") # WGS 84
+
+
+tm_shape(zipcodes) +
+  tm_borders() + 
+  tm_fill("ZIPCODE", palette = "RdYlGn", title = "Map of Bikes Stops in Zipcodes") +
+tm_shape(Lanes) +
+    tm_lines(col="dodgerblue3") + 
+tm_shape(d) +
+  tm_bubbles(size = .1, col = "red")
+
+
