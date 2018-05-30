@@ -257,123 +257,70 @@ for (temp in temperatures){
 
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - NAIVE (for stations)
-Rduration <- data.frame(matrix(nrow = length(stations), ncol = (1+length(temperatures))))
-colnames(Rduration) <- c("Station", p.names)
+Rduration <- data.frame(matrix(nrow = length(stations), ncol = 2))
+colnames(Rduration) <- c("Station", "p.value")
 Rduration$Station <- stations
 
-for (temp in temperatures){
-  for (station in stations) {
-    X <- data[data$Start.station.number == station, "Duration"]
-    y <- data[data$Start.station.number == station, "TMP_bins"]
-    Rduration[Rduration$Station == station, paste("p.value", temp, sep=".")] = permutation_test(X, y)
-  }
+for (station in stations) {
+  X <- data[data$Start.station.number == station, "Duration"]
+  y <- data[data$Start.station.number == station, "TMP"]
+  Rduration[Rduration$Station == station, "p.value"] = permutation_test(X, y)
 }
 
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - NAIVE (for everything)
-naive_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
-colnames(naive_results) <- c("Temperature", "p.value")
-naive_results$Temperature <- temperatures
-nperm = 100
-for (temp in temperatures) {
-  X <- data$Duration
-  y <- data$TMP_bins
-  T_realdata = T2(X,y)
-  T_perm = rep(0,nperm)
-  for(i in 1:nperm){
-    perms <- sample(length(y), length(y))
-    garbage <- y[perms]
-    T_perm[i] <- T2(X, garbage)
-  }
-  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-  naive_results[naive_results$Temperature == temp, "p.value"] = pval
+naive_results <- 0
+X <- data$Duration
+y <- data$TMP
+T_realdata = T2(X,y)
+T_perm = rep(0,nperm)
+for(i in 1:nperm){
+  perms <- sample(length(y), length(y))
+  garbage <- y[perms]
+  T_perm[i] <- T2(X, garbage)
 }
+pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+naive_results = pval
+
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY SEASON
-seasonal_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
-colnames(seasonal_perm_results) <- c("Temperature", "p.value")
-seasonal_perm_results$Temperature <- temperatures
+seasonal_perm_results <- 0
 nperm = 1000
-for (temp in temperatures) {
-  X <- data$Duration
-  treatment <- data[, c("TMP_bins", "Season")]
-  colnames(treatment) <- c("temp", "Season")
-  T_realdata = T2(X,treatment$temp)
-  T_perm = rep(0,nperm)
-  for(i in 1:nperm) {
-    garbage <- treatment
-    for (season in c("Fall", "Winter", "Spring", "Summer")) {
-      condition_vec <- (garbage$Season == season)
-      perms <- sample(sum(condition_vec), sum(condition_vec))
-      garbage[condition_vec, "temp"] <- (garbage[condition_vec, "temp"][perms])
-    }
-    T_perm[i] <- T2(X, garbage$temp)
+
+X <- data$Duration
+treatment <- data[, c("TMP", "Season")]
+colnames(treatment) <- c("temp", "Season")
+T_realdata = T2(X,treatment$temp)
+T_perm = rep(0,nperm)
+for(i in 1:nperm) {
+  garbage <- treatment
+  for (season in c("Fall", "Winter", "Spring", "Summer")) {
+    condition_vec <- (garbage$Season == season)
+    perms <- sample(sum(condition_vec), sum(condition_vec))
+    garbage[condition_vec, "temp"] <- (garbage[condition_vec, "temp"][perms])
   }
-  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-  seasonal_perm_results[seasonal_perm_results$Temperature == temp, "p.value"] = pval
+  T_perm[i] <- T2(X, garbage$temp)
 }
+pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+seasonal_perm_results = 0
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY Month
 data$Month <- as.POSIXlt(data$Start.date, tz = "UTC")$mon
-month_perm_results <- data.frame(matrix(nrow = length(temperatures), ncol = 2))
-colnames(seasonal_perm_results) <- c("Temperature", "p.value")
-month_perm_results$Temperature <- temperatures
+month_perm_results <- 0
 nperm = 1000 
-for (temp in temperatures) {
-  X <- data$Duration
-  treatment <- data[, c("TMP_bins", "Month")]
-  colnames(treatment) <- c("temp", "Month")
-  T_realdata = T2(X,treatment$temp)
-  T_perm = rep(0,nperm)
-  for(i in 1:nperm) {
-    garbage <- treatment
-    for (mon in 0:11) {
-      condition_vec <- (garbage$Month == mon)
-      perms <- sample(sum(condition_vec), sum(condition_vec))
-      garbage[condition_vec, "temp"] <- (garbage[condition_vec, "temp"][perms])
-    }
-    T_perm[i] <- T2(X, garbage$temp)
+X <- data$Duration
+treatment <- data[, c("TMP", "Month")]
+colnames(treatment) <- c("temp", "Month")
+T_realdata = T2(X,treatment$temp)
+T_perm = rep(0,nperm)
+for(i in 1:nperm) {
+  garbage <- treatment
+  for (mon in 0:11) {
+    condition_vec <- (garbage$Month == mon)
+    perms <- sample(sum(condition_vec), sum(condition_vec))
+    garbage[condition_vec, "temp"] <- (garbage[condition_vec, "temp"][perms])
   }
-  pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-  month_perm_results[month_perm_results$Temperature == temp, "p.value"] = pval
+  T_perm[i] <- T2(X, garbage$temp)
 }
-
-
-#### GEOLOCATION 
-# install.packages("sf", dependencies = TRUE)
-# install.packages("tmap", dependencies = TRUE)
-# install.packages("tidyverse", dependencies = TRUE)
-# install.packages("LearnBayes")
-# install.packages("tidycensus")
-# install.packages("gdata")
-
-library(rgdal)
-library("sf")
-library("tmap")
-library("tidyverse")
-library("dplyr")
-library("sp")
-library("tidycensus")
-library("raster")
-
-zipcodes <- st_read("Desktop/Zip_Codes/Zip_Codes.shp")
-lanes <- st_read("Desktop/Bicycle_Lanes/Bicycle_Lanes.shp")
-bikes <- st_read("Desktop/mygeodata/Bike_Locations.shp")
-bikes = st_transform(bikes, st_crs(zipcodes))
-bounds <- as.matrix(extent(zipcodes))
-bikes[(bikes$LATITUDE >= bounds["y", "min"] & bikes$LATITUDE <= bounds["y", "max"]),]
-bikes[(bikes$LONGITUDE >= bounds["x", "min"] & bikes$LONGITUDE <= bounds["x", "max"]),]
-
-d <- data.frame(lon=bikes$LONGITUDE, lat=bikes$LATITUDE)
-coordinates(d) <- c("lon", "lat")
-proj4string(d) <- CRS("+init=epsg:4326") # WGS 84
-
-
-tm_shape(zipcodes) +
-  tm_borders() + 
-  tm_fill("ZIPCODE", palette = "RdYlGn", title = "Map of Bikes Stops in Zipcodes") +
-tm_shape(Lanes) +
-    tm_lines(col="dodgerblue3") + 
-tm_shape(d) +
-  tm_bubbles(size = .1, col = "red")
-
+pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
+month_perm_results = pval
