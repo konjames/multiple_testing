@@ -115,3 +115,64 @@ tm_shape(d) +
   tm_bubbles(size = .1, col = "red")
 
 
+daily_data = data.frame(matrix(nrow = 365, ncol = 2))
+colnames(daily_data) = c("Date", "Rides")
+days <- seq(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-12-31", tz = "UTC"), by = "day")
+daily_data$Date <- days
+
+for(i in 1:length(days)) {
+  date1 <- days[i]
+  date2 <- days[i+1]
+  daily_data[daily_data$Date == date1, "Rides"] <- sum(Lasso_data[hour_int(Lasso_data$Date, date1, date2), "Rides"])
+}
+
+# PLOTS because who doesn't like pretty plots
+ggplot(Lasso_data, aes(x = Date, y = Rides, color = Temperature)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Rides") +
+  ylab("Rides vs Date (Hourly)") + 
+  geom_vline(xintercept = as.POSIXct("2011-01-01", tz = "UTC"), color = "Red") + 
+  geom_vline(xintercept = as.POSIXct("2011-12-21", tz = "UTC"), color = "Purple") + 
+  geom_vline(xintercept = as.POSIXct("2011-03-20", tz = "UTC"), color = "Green") + 
+  geom_vline(xintercept = as.POSIXct("2011-06-20", tz = "UTC"), color = "Pink")
+
+ggplot(daily_data, aes(x = Date, y = Rides, color = Temperature)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Rides") +
+  ylab("Rides vs Date (Daily)")
+
+# Seasons
+ggplot(Lasso_data[Lasso_data$Season == "Fall",], aes(x = Date, y = Rides, color = Temperature)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Rides") +
+  ylab("Rides vs Date (Fall)")
+
+ggplot(Lasso_data[Lasso_data$Season == "Winter",], aes(x = Date, y = Rides, color = Temperature)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Rides") +
+  ylab("Rides vs Date (Winter)")
+
+ggplot(Lasso_data[Lasso_data$Season == "Spring",], aes(x = Date, y = Rides, color = Temperature)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Rides") +
+  ylab("Rides vs Date (Fall)")
+
+ggplot(Lasso_data[Lasso_data$Season == "Summer",], aes(x = Date, y = Rides, color = Temperature)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Rides") +
+  ylab("Rides vs Date (Winter)")
+
+
+ggplot(data, aes(x = Start.date, y = TMP)) + 
+  geom_point() + geom_line() +
+  xlab("Date") +
+  ylab("Weather") +
+  ylab("Weather vs Date")
+
+
