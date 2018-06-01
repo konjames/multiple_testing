@@ -3,8 +3,13 @@ setwd("~/Desktop")
 ## LIBRARIES
 library("lubridate")
 library("readr")
-install.packages("forecast", dependencies = TRUE)
+#install.packages("forecast", dependencies = TRUE)
 library("forecast")
+library("ggplot2")
+library(gridExtra)
+library(grid)
+library(ggplot2)
+library(lattice)
 
 data = NULL
 
@@ -199,25 +204,31 @@ data[data$Day == "Sun", "Weekend"] <- 1
 ## QUESTION: IS THERE A CHANGE IN THE DEMAND FOR A STATION BETWEEN SEASONS
 ## TEST: USING DIFFERENT OF MEANS NORMAL DISTRIBUTION: USE PERMUTATION TEST 
 data$Season <- "Fall"
+Lasso_data$Season <- "Fall"
 data$Start.date <- as.POSIXct(data$Start.date, tz = "UTC")
+Lasso_data$Date <- as.POSIXct(Lasso_data$Date, tz = "UTC")
 #winter <- interval(as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")) # Winter dates
 #data[data$Start.date %within% winter, "Season"] <- "Winter"
 data[hour_int(data$Start.date, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")), "Season"] <- "Winter"
+Lasso_data[hour_int(data$Date, as.POSIXct("2011-01-01", tz = "UTC"), as.POSIXct("2011-03-20", tz = "UTC")), "Season"] <- "Winter"
 
 #winter <- interval(as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")) # Winter dates
 #data[data$Start.date %within% winter, "Season"] <- "Winter"
 data[hour_int(data$Start.date, as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")), "Season"] <- "Winter"
+Lasso_data[hour_int(Lasso_data$Date, as.POSIXct("2011-12-21 01:00:00", tz = "UTC"), as.POSIXct("2011-12-31 23:00:00", tz = "UTC")), "Season"] <- "Winter"
 
 #spring <- interval(as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")) # Spring dates
 #data[data$Start.date %within% spring, "Season"] <- "Spring"
 data[hour_int(data$Start.date, as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")), "Season"] <- "Spring"
+Lasso_data[hour_int(Lasso_data$Date, as.POSIXct("2011-03-20 01:00:00", tz = "UTC"), as.POSIXct("2011-06-20", tz = "UTC")), "Season"] <- "Spring"
 
 #summer <- interval(as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")) # Fall dates
 #data[data$Start.date %within% summer, "Season"] <- "Summer"
 data[hour_int(data$Start.date, as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")), "Season"] <- "Summer"
+Lasso_data[hour_int(Lasso_data$Date, as.POSIXct("2011-06-20 01:00:00", tz = "UTC"), as.POSIXct("2011-09-22", tz = "UTC")), "Season"] <- "Summer"
 
 
-stations <- levels(as.factor(data$Start.station.number))
+stations <- c(levels(as.factor(data$Start.station.number)))
 popular_stations <- data.frame(matrix(nrow = length(stations), ncol = 6))
 colnames(popular_stations) <- c("Station", "Fall", "Winter", "Spring", "Summer", "Total")
 popular_stations$Station <- stations
@@ -256,6 +267,24 @@ for (temp in temperatures){
 }
 
 
+r2.stations <- data.frame(matrix(nrow = length(stations), ncol = 5))
+colnames(r2.stations) <- c("Station", "R.2 Linear", "R.2 Quadratic", "R.2 Bin Linear", "R.2 Bin Quadratic")
+r2.stations$Station <- stations
+for (station in stations) {
+  data_trunc <- data[data$Start.station.number == station, c("Duration","TMP", "TMP_bins")]
+  data_trunc$TMP_quad <- data_trunc$TMP^2
+  data_trunc$TMP_bins_quad <- data_trunc$TMP_bins^2
+  r2.stations[r2.stations$Station == station, "R.2 Linear"] = 
+    round(summary(lm(Duration ~ TMP, data = data_trunc))$r.squared, 2)
+  r2.stations[r2.stations$Station == station, "R.2 Quadratic"] = 
+    round(summary(lm(Duration ~ TMP + TMP_quad, data = data_trunc))$r.squared, 2)
+  r2.stations[r2.stations$Station == station, "R.2 Bin Linear"] = 
+    round(summary(lm(Duration ~ TMP_bins, data = data_trunc))$r.squared, 2) 
+  r2.stations[r2.stations$Station == station, "R.2 Bin Quadratic"] = 
+    round(summary(lm(Duration ~ TMP_bins + TMP_bins_quad, data = data_trunc))$r.squared, 2)
+}
+
+
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - NAIVE (for stations)
 Rduration <- data.frame(matrix(nrow = length(stations), ncol = 2))
 colnames(Rduration) <- c("Station", "p.value")
@@ -279,12 +308,10 @@ for(i in 1:nperm){
   garbage <- y[perms]
   T_perm[i] <- T2(X, garbage)
 }
-pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-naive_results = pval
+naive_results = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
 
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY SEASON
-seasonal_perm_results <- 0
 nperm = 1000
 
 X <- data$Duration
@@ -301,13 +328,10 @@ for(i in 1:nperm) {
   }
   T_perm[i] <- T2(X, garbage$temp)
 }
-pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-seasonal_perm_results = 0
+seasonal_perm_results = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
 
 ## USING DURATION AS A MEASUREMENT OF BIKE USAGE - PERMUTING BY Month
 data$Month <- as.POSIXlt(data$Start.date, tz = "UTC")$mon
-month_perm_results <- 0
-nperm = 1000 
 X <- data$Duration
 treatment <- data[, c("TMP", "Month")]
 colnames(treatment) <- c("temp", "Month")
@@ -322,5 +346,4 @@ for(i in 1:nperm) {
   }
   T_perm[i] <- T2(X, garbage$temp)
 }
-pval = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
-month_perm_results = pval
+month_perm_results = (1 + sum(T_perm>=T_realdata)) / (1 + nperm)
